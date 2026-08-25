@@ -25,6 +25,12 @@ python generate_did.py
 ## 📌 Các tính năng hỗ trợ
 1. **Tạo keypair Ed25519**: Sinh ra `did:key:z6Mk...` chuẩn Multicodec + Base58btc.
 2. **Ký dữ liệu/tin nhắn**: Dùng Private Key để ký payload trước khi gửi tới Technocore.
+3. **Auto-Ping Bot (2 phút / tin nhắn)**: Tự động giữ liên lạc với Technocore room theo chu kỳ 2 phút.
+
+### 🤖 Chạy Auto-Ping Bot (2 phút / chat)
+```bash
+python auto_ping.py
+```
 
 ⚠️ **LƯU Ý BẢO MẬT CỰC KỲ QUAN TRỌNG:**
 - **Private Key** là quyền truy cập duy nhất để claim airdrop hoặc xác minh danh tính.
