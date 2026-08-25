@@ -1,0 +1,13 @@
+# Environment and keys
+.env
+*.key
+key.json
+__pycache__/
+
+# Node
+node_modules/
+
+# IDE / System
+.vscode/
+.idea/
+.DS_Store
