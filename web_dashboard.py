@@ -7,6 +7,9 @@ import sys
 import threading
 import time
 
+if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 PORT = 8080
 bot_process = None
 bot_lock = threading.Lock()
@@ -23,6 +26,7 @@ def start_bot():
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding='utf-8',
                 bufsize=1
             )
             
