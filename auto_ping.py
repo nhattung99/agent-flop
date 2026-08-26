@@ -17,16 +17,31 @@ DEFAULT_PRIVATE_KEY = os.getenv(
 INTERVAL_SECONDS = 120
 ROOM_NAME = "lobby"
 
+def log_message(text):
+    print(text)
+    try:
+        with open("bot.log", "a", encoding="utf-8") as f:
+            f.write(text + "\n")
+    except Exception:
+        pass
+
 def run_auto_ping():
     client = TechnocoreClient(DEFAULT_PRIVATE_KEY)
-    print("==================================================")
-    print("🤖 TECHNOCORE AUTO-PING BOT (Agent Flop)")
-    print("==================================================")
-    print(f"🔑 DID Key         : {client.did_key}")
-    print(f"⏱️ Khoảng thời gian: 2 phút / 1 tin nhắn ({INTERVAL_SECONDS} giây)")
-    print(f"💬 Room            : {ROOM_NAME}")
-    print("==================================================")
-    print("Press Ctrl+C to stop.\n")
+    # Clear log file on startup
+    try:
+        with open("bot.log", "w", encoding="utf-8") as f:
+            f.write("")
+    except Exception:
+        pass
+
+    log_message("==================================================")
+    log_message("🤖 TECHNOCORE AUTO-PING BOT (Agent Flop)")
+    log_message("==================================================")
+    log_message(f"🔑 DID Key         : {client.did_key}")
+    log_message(f"⏱️ Khoảng thời gian: 2 phút / 1 tin nhắn ({INTERVAL_SECONDS} giây)")
+    log_message(f"💬 Room            : {ROOM_NAME}")
+    log_message("==================================================")
+    log_message("Press Ctrl+C to stop.\n")
 
     count = 1
     while True:
@@ -34,19 +49,19 @@ def run_auto_ping():
             timestamp_str = time.strftime("%H:%M:%S", time.localtime())
             msg = f"Agent Flop check-in #{count} | Panda (nhattung00) | active & verified at {timestamp_str}"
             
-            print(f"[{timestamp_str}] 📤 Sending msg #{count}...")
+            log_message(f"[{timestamp_str}] 📤 Sending msg #{count}...")
             res = client.post_signed_message(ROOM_NAME, msg)
             
-            print(f"[{timestamp_str}] ✅ Gửi thành công msg #{count}!")
+            log_message(f"[{timestamp_str}] ✅ Gửi thành công msg #{count}!")
             count += 1
             
         except KeyboardInterrupt:
-            print("\n🛑 Đã dừng Auto-Ping Bot.")
+            log_message("\n🛑 Đã dừng Auto-Ping Bot.")
             sys.exit(0)
         except Exception as e:
-            print(f"⚠️ Lỗi khi gửi: {e}. Sẽ thử lại sau {INTERVAL_SECONDS}s...")
+            log_message(f"⚠️ Lỗi khi gửi: {e}. Sẽ thử lại sau {INTERVAL_SECONDS}s...")
         
-        print(f"⏳ Chờ {INTERVAL_SECONDS} giây (2 phút) cho lần gửi tiếp theo...\n")
+        log_message(f"⏳ Chờ {INTERVAL_SECONDS} giây (2 phút) cho lần gửi tiếp theo...\n")
         time.sleep(INTERVAL_SECONDS)
 
 if __name__ == "__main__":
