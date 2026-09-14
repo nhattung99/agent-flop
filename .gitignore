@@ -3,6 +3,14 @@
 *.key
 key.json
 __pycache__/
+last_message.json
+bot.log
+run_forever.log
+
+# Sonnet contest local cache / resume (never commit the seed)
+sonnet/_cache/
+sonnet/state.json
+sonnet/state.json.tmp
 
 # Node
 node_modules/
