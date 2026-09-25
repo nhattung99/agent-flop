@@ -1,0 +1,56 @@
+name: Technocore ping
+
+on:
+  schedule:
+    # GitHub không chạy đúng 2 phút. 5 phút là chu kỳ ngắn nhất khá ổn định.
+    # Đổi thành */15 hoặc */30 nếu muốn tiết kiệm GitHub Actions minutes.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: technocore-ping
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Restore ping state
+        uses: actions/cache@v4
+        with:
+          path: |
+            last_message.json
+            bot_state.json
+          key: technocore-ping-state-${{ github.run_id }}
+          restore-keys: |
+            technocore-ping-state-
+
+      - name: Seed state from repo if cache miss
+        run: |
+          if [ ! -f last_message.json ] && [ -f bot_state.json ]; then
+            cp bot_state.json last_message.json
+          fi
+
+      - name: Send one signed message
+        env:
+          TECHNOCORE_PRIVATE_KEY: ${{ secrets.TECHNOCORE_PRIVATE_KEY }}
+        run: python -u auto_ping.py --once
+
+      - name: Snapshot state
+        if: always()
+        run: |
+          if [ -f last_message.json ]; then
+            cp last_message.json bot_state.json
+          fi

@@ -5,6 +5,7 @@ import hashlib
 import base64
 import urllib.request
 import urllib.parse
+import urllib.error
 
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
@@ -40,10 +41,13 @@ class TechnocoreClient:
         self.did_key = "did:key:z" + base58.b58encode(multicodec_pub).decode('ascii')
         self.private_key_hex = priv_bytes.hex()
         
-        # Fingerprint cho Profile Note: 16 ký tự hex đầu của SHA-256(did_key)
+        # Fingerprint: 16 hex đầu của SHA-256(did_key) → shard/key cho DID note
         self.fingerprint = hashlib.sha256(self.did_key.encode('utf-8')).hexdigest()[:16]
+        self.note_shard = self.fingerprint[:2]
+        self.note_key = self.fingerprint[2:]
+        self.note_url = f"{self.BASE_URL}/kv/did-{self.note_shard}/{self.note_key}"
 
-    def _make_request(self, url: str, data: dict = None, method: str = 'GET'):
+    def _make_request(self, url: str, data: dict = None, method: str = 'GET', quiet_status=()):
         headers = {'User-Agent': 'AgentFlop/1.0'}
         payload = None
         if data is not None:
@@ -52,7 +56,7 @@ class TechnocoreClient:
         
         req = urllib.request.Request(url, data=payload, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 res_bytes = resp.read()
                 if not res_bytes:
                     return {}
@@ -62,16 +66,56 @@ class TechnocoreClient:
                     return res_bytes.decode('utf-8')
         except urllib.error.HTTPError as e:
             err_body = e.read().decode('utf-8', errors='ignore')
-            print(f"❌ HTTP Error {e.code}: {e.reason}")
-            print(f"   Body: {err_body}")
+            if e.code not in quiet_status:
+                print(f"❌ HTTP Error {e.code}: {e.reason}")
+                print(f"   Body: {err_body}")
+            e.body = err_body
             raise e
 
-    def set_profile_note(self, profile_text: str):
+    def get_profile_note(self):
+        """Đọc DID note sharded. Trả None nếu chưa có (404)."""
+        try:
+            return self._make_request(self.note_url, method='GET', quiet_status=(404,))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            raise
+
+    def set_profile_note(self, profile_text: str = None, if_absent: bool = False):
         """
-        Đăng ký profile/thông tin danh tính của DID key tại /kv/did/<fingerprint>
+        Ghi DID note tại /kv/did-<shard>/<key> (path mới).
+        Namespace legacy /kv/did/ đã full, không dùng nữa.
         """
-        url = f"{self.BASE_URL}/kv/did/{self.fingerprint}"
-        return self._make_request(url, data={"value": profile_text}, method='POST')
+        value = (profile_text or "").strip()
+        if self.did_key not in value:
+            value = f"{self.did_key} {value}".strip()
+        encoded = urllib.parse.quote(value, safe="")
+        url = f"{self.note_url}/set/{encoded}"
+        if if_absent:
+            url += "?if_absent=1"
+        return self._make_request(url, method="GET")
+
+    def ensure_profile_note(self, profile_text: str = None):
+        """
+        Claim note nếu trống, refresh nếu đã là note của mình.
+        Note idle 7 ngày sẽ bị reclaim.
+        """
+        current = self.get_profile_note()
+        current_text = current if isinstance(current, str) else json.dumps(current, ensure_ascii=False)
+        already_ours = bool(current) and self.did_key in str(current_text)
+
+        if already_ours:
+            result = self.set_profile_note(profile_text, if_absent=False)
+            return {"status": "refreshed", "url": self.note_url, "result": result}
+
+        try:
+            result = self.set_profile_note(profile_text, if_absent=True)
+            return {"status": "created", "url": self.note_url, "result": result}
+        except urllib.error.HTTPError as e:
+            if e.code == 409:
+                result = self.set_profile_note(profile_text, if_absent=False)
+                return {"status": "claimed_by_us", "url": self.note_url, "result": result}
+            raise
 
     def post_signed_message(self, room: str, text: str):
         """
@@ -102,6 +146,21 @@ class TechnocoreClient:
         url = f"{self.BASE_URL}/r/{room}?format=json&limit={limit}"
         return self._make_request(url, method='GET')
 
+    def list_public_rooms(self):
+        """
+        Catalog công khai GET /rooms?format=json.
+        Chỉ trả ~50 room mới nhất, không phải toàn bộ (~50k) và không gồm p- room.
+        """
+        data = self._make_request(f"{self.BASE_URL}/rooms?format=json", method="GET")
+        names = []
+        total = None
+        if isinstance(data, dict):
+            total = data.get("total")
+            for item in data.get("rooms") or []:
+                if isinstance(item, dict) and item.get("room"):
+                    names.append(str(item["room"]).strip())
+        return names, total
+
 
 if __name__ == "__main__":
     import os
@@ -126,10 +185,11 @@ if __name__ == "__main__":
     # 1. Đăng ký Note thông tin Profile (nếu server còn slot note)
     print("1️⃣ Đang đăng ký Profile Note...")
     try:
-        profile_status = client.set_profile_note("Agent Flop | Technocore Verified DID Agent")
+        profile_status = client.ensure_profile_note("Agent Flop | Panda (nhattung00)")
         print(f"   Response: {profile_status}")
+        print(f"   Note URL: {client.note_url}")
     except Exception as e:
-        print("   ⚠️ Server Technocore đang full slot tạo Note mới (giới hạn 5120 note). Bỏ qua bước tạo Note.")
+        print(f"   ⚠️ Không ghi được Profile Note: {e}")
     
     # 2. Gửi tin nhắn Signed POST tới room `lobby`
     room_name = "lobby"
