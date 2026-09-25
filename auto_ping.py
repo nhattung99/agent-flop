@@ -178,7 +178,18 @@ def run_auto_ping(once=False):
     current_room = rotation.get("room") or ""
     remaining = int(rotation.get("remaining") or 0)
     burst = int(rotation.get("burst") or 0)
-    if current_room not in ROOMS or remaining <= 0:
+    if once:
+        # Actions chỉ gửi 1 tin: ưu tiên room mở (lobby), tránh room có room-allow.
+        preferred = "lobby" if "lobby" in ROOMS else (SEED_ROOMS[0] if SEED_ROOMS else "")
+        if preferred and preferred not in skipped:
+            current_room = preferred
+            burst = 1
+            remaining = 1
+        elif current_room not in ROOMS or remaining <= 0:
+            current_room, burst = assign_room_burst(current_room, skipped)
+            remaining = 1
+            burst = 1
+    elif current_room not in ROOMS or remaining <= 0:
         current_room, burst = assign_room_burst(current_room, skipped)
         remaining = burst
     mode = "GitHub Actions (1 tin / lần chạy)" if once else "always-on"
@@ -270,10 +281,19 @@ def run_auto_ping(once=False):
         })
 
         if once:
-            if entry.get("status") != "sent":
-                sys.exit(1)
-            log_message("GitHub Actions: đã gửi 1 tin, kết thúc job.")
-            return
+            if entry.get("status") == "sent":
+                log_message("GitHub Actions: đã gửi 1 tin, kết thúc job.")
+                return
+            # 403/room-allow: đổi room ngay trong cùng job (không sleep 2 phút).
+            err = str(entry.get("error") or "").lower()
+            locked = "403" in err or "denied" in err or "not listed" in err or "own" in err
+            if locked and remaining <= 0:
+                max_tries = min(len(ROOMS), 15)
+                if len(skipped) >= max_tries:
+                    log_message(f"❌ Không gửi được sau {len(skipped)} room bị chặn.")
+                    sys.exit(1)
+                continue
+            sys.exit(1)
 
         log_message(f"⏳ Chờ {INTERVAL_SECONDS} giây (2 phút) cho lần gửi tiếp theo...\n")
         time.sleep(INTERVAL_SECONDS)
